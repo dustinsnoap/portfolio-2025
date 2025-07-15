@@ -1,16 +1,18 @@
 ---
-import "../styles/global.css"; // Make sure this exists
+import "../styles/global.css";
+import CircuitBackground from "../components/CircuitBackground.astro";
 ---
 
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Developer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dustin Snoap</title>
   </head>
   <body>
+    <CircuitBackground />
     <slot />
+    <script type="module" src="/scripts/circuit-background.js"></script>
   </body>
 </html>
