@@ -1,6 +1,7 @@
 ---
-import "../styles/global.css";
 import CircuitBackground from "../components/CircuitBackground.astro";
+import NameBackground from "../components/Name.astro";
+import "../styles/global.css";
 ---
 
 <!DOCTYPE html>
@@ -12,7 +13,9 @@ import CircuitBackground from "../components/CircuitBackground.astro";
   </head>
   <body>
     <CircuitBackground />
+    <NameBackground />
     <slot />
     <script type="module" src="/scripts/circuit-background.js"></script>
+    <script type="module" src="/scripts/name.js"></script>
   </body>
 </html>

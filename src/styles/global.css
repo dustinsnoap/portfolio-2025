@@ -21,3 +21,21 @@ body {
   font-size: 1.125rem;
   margin-top: 0.5rem;
 }
+
+#circuitCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#renderCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
