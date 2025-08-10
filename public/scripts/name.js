@@ -2,138 +2,194 @@
 // Initialization + Configuration
 // ===================================
 
-// Grab canvas element and its 2D context
-const canvas = document.getElementById('nameCanvas');
-const ctx = canvas.getContext('2d', { willReadFrequently: true });
+import { getPixelScale, onPixelScaleChange } from "./pixel-scale.js";
+
+// Grab canvas + 2D context
+const canvas = document.getElementById("nameCanvas");
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
 // Image metadata and raw image data
-let originalData = null;
-let pixelWidth = 198;            // default fallback
+let originalData = null; // pristine pixels from the source image
+let pixelWidth = 198;    // fallback; replaced after image decode
 let pixelHeight = 0;
 
 // 🎛️ Grain configuration
-const GRAIN_BASE = 1;            // grain intensity at top
-const GRAIN_MULTIPLIER = 50;     // how much intensity increases toward bottom
-const GRAIN_SCALE = 0.5;         // overall multiplier for visual strength
+const GRAIN_BASE = 1;        // grain intensity at the very top row
+const GRAIN_MULTIPLIER = 50; // how much intensity increases from top→bottom
+const GRAIN_SCALE = 0.5;     // global multiplier applied to the random offset
 
-// 🎛️ Pixel display config (CSS scale)
-const MAX_WIDTH_RATIO = 0.8;     // % of screen width to use for canvas
-const MIN_PIXEL_SCALE = 2;       // never render smaller than this multiple
-const MAX_PIXEL_SCALE = 8;       // never render larger than this multiple
+// Animation handle
+let rafId = null;
 
 // ===================================
-// Bootstrap (load image + start loop)
+// Bootstrap (load image + subscriptions)
 // ===================================
 
-loadStaticImage('/images/name.png');  // <-- path to static PNG
+loadStaticImage("/images/name.png"); // <-- path to your PNG
 
-// Resize canvas when window resizes
-window.addEventListener('resize', () => {
+// Keep CSS scale synced with global pixel-scale service
+onPixelScaleChange(() => {
   if (originalData) updateCanvasDisplaySize();
 });
+
+// Pause/resume animation when tab visibility changes (saves CPU/GPU)
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopLoop();
+  else if (originalData) startLoop();
+});
+
+// Optional: clean up on page unload (helps during hot reloads)
+window.addEventListener("beforeunload", stopLoop);
 
 // ===================================
 // Image Loading + Drawing
 // ===================================
 
 /**
- * Loads a static PNG, draws it to canvas, and starts grain loop.
- * @param {string} src - Path to image (relative to /public)
+ * Loads a static PNG, draws it once, caches the pristine pixels,
+ * then starts the animation loop.
+ * @param {string} src - Path to the image in /public
  */
 async function loadStaticImage(src) {
   const img = new Image();
   img.src = src;
-  await img.decode();  // wait for full decoding
+  await img.decode();
 
-  // Set internal canvas resolution to match image
+  // Match internal canvas resolution to the source pixel grid
   pixelWidth = img.width;
   pixelHeight = img.height;
   canvas.width = pixelWidth;
   canvas.height = pixelHeight;
 
-  // Apply CSS scale
+  // Apply current CSS scale
   updateCanvasDisplaySize();
 
-  // Draw the image once to initialize canvas
+  // Seed the canvas and cache pristine pixels
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0);
-
-  // Cache the clean pixel data
   originalData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-  // Begin animation loop
-  animateGrain();
+  startLoop();
 }
 
 /**
- * Dynamically sets the canvas’s on-screen pixel scale based on viewport width.
+ * Applies the shared pixel scale to the canvas CSS size.
+ * Keeps “pixel size” identical across components.
  */
 function updateCanvasDisplaySize() {
-  const screenWidth = window.innerWidth;
-  const targetWidth = screenWidth * MAX_WIDTH_RATIO;
-
-  const scale = clamp(
-    Math.floor(targetWidth / pixelWidth),
-    MIN_PIXEL_SCALE,
-    MAX_PIXEL_SCALE
-  );
-
-  canvas.style.width = `${pixelWidth * scale}px`;
+  const scale = getPixelScale();
+  canvas.style.width  = `${pixelWidth * scale}px`;
   canvas.style.height = `${pixelHeight * scale}px`;
 }
 
 // ===================================
-// Grain Animation Loop
+// Animation Loop (requestAnimationFrame)
 // ===================================
 
 /**
- * Applies animated grain to the image, stronger at the bottom.
- * Runs continuously using requestAnimationFrame.
+ * Starts the animation loop if not already running.
  */
-function animateGrain() {
+function startLoop() {
+  if (rafId !== null) return;
+  const tick = () => {
+    renderGrainFrame();
+    rafId = requestAnimationFrame(tick);
+  };
+  rafId = requestAnimationFrame(tick);
+}
+
+/**
+ * Cancels the animation loop if running.
+ */
+function stopLoop() {
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+}
+
+// ===================================
+// Grain Rendering (modularized)
+// ===================================
+
+/**
+ * Renders one frame of grain by cloning pristine pixels,
+ * applying grain, and pushing the result to the canvas.
+ */
+function renderGrainFrame() {
   if (!originalData) return;
 
-  const width = originalData.width;
-  const height = originalData.height;
+  // 1) Clone the original pixel buffer for this frame
+  const frame = cloneImageData(originalData);
 
-  // Create a fresh copy of the pixel data each frame
-  const grainData = new ImageData(
-    new Uint8ClampedArray(originalData.data),
-    width,
-    height
-  );
+  // 2) Apply grain in-place to the cloned buffer
+  applyVerticalGrain(frame, {
+    base: GRAIN_BASE,
+    multiplier: GRAIN_MULTIPLIER,
+    scale: GRAIN_SCALE,
+  });
 
-  const data = grainData.data;
+  // 3) Commit to the canvas
+  ctx.putImageData(frame, 0, 0);
+}
 
-  // Loop over every pixel (each pixel = 4 RGBA values)
+/**
+ * Returns a deep copy of an ImageData object.
+ */
+function cloneImageData(src) {
+  return new ImageData(new Uint8ClampedArray(src.data), src.width, src.height);
+}
+
+/**
+ * Applies vertically weighted grain to an ImageData buffer.
+ * Stronger grain appears toward the bottom of the image.
+ */
+function applyVerticalGrain(imgData, cfg) {
+  const { width, height, data } = imgData;
+  const { base, multiplier, scale } = cfg;
+
+  // Iterate per pixel (RGBA stride = 4)
+  // Micro-opts: hoist width to avoid repeated property lookups
   for (let i = 0; i < data.length; i += 4) {
-    const alpha = data[i + 3];
+    const a = data[i + 3];
+    if (!isOpaque(a)) continue; // only touch fully opaque pixels
 
-    // Skip transparent pixels
-    if (alpha !== 255) continue;
-
-    // Get vertical Y position of pixel
-    const pixelIndex = i / 4;
+    const pixelIndex = i >> 2;            // divide by 4
     const y = Math.floor(pixelIndex / width);
-    const verticalFactor = y / height;
+    const intensity = computeGrainIntensity(y, height, base, multiplier);
+    const offset = computeRandomOffset(intensity, scale);
 
-    // Calculate grain range at this height
-    const grainRange = GRAIN_BASE + verticalFactor * GRAIN_MULTIPLIER;
-
-    // Random grain offset, centered around 0
-    const grain = Math.floor((Math.random() * grainRange - grainRange / 2) * GRAIN_SCALE);
-
-    // Apply to RGB channels
-    data[i]     = clamp(data[i]     + grain); // R
-    data[i + 1] = clamp(data[i + 1] + grain); // G
-    data[i + 2] = clamp(data[i + 2] + grain); // B
+    // Apply offset to RGB channels (clamped to 0..255)
+    data[i]     = clamp8(data[i]     + offset); // R
+    data[i + 1] = clamp8(data[i + 1] + offset); // G
+    data[i + 2] = clamp8(data[i + 2] + offset); // B
   }
+}
 
-  // Push result to canvas
-  ctx.putImageData(grainData, 0, 0);
+/**
+ * Returns true if the alpha channel indicates a fully opaque pixel.
+ */
+function isOpaque(alpha) {
+  return alpha === 255;
+}
 
-  // Schedule next frame
-  requestAnimationFrame(animateGrain);
+/**
+ * Computes the raw grain intensity for a given row `y`.
+ * Intensity increases linearly from top (0) to bottom (height-1).
+ */
+function computeGrainIntensity(y, height, base, multiplier) {
+  const t = y / height; // 0..1 vertical factor
+  return base + t * multiplier;
+}
+
+/**
+ * Converts an intensity + scale into a signed random offset for RGB channels.
+ * The offset is centered around 0.
+ */
+function computeRandomOffset(intensity, scale) {
+  // Random in [-intensity/2, +intensity/2], then scaled
+  const raw = Math.random() * intensity - intensity / 2;
+  return Math.floor(raw * scale);
 }
 
 // ===================================
@@ -141,9 +197,9 @@ function animateGrain() {
 // ===================================
 
 /**
- * Restricts a number between a min and max value.
- * Used for color values and pixel scaling.
+ * Fast clamp to 0..255 for 8-bit channel math.
  */
-function clamp(v, min = 0, max = 255) {
-  return Math.max(min, Math.min(max, v));
+function clamp8(v) {
+  // Bit trick is unsafe for negatives; stick to Math for clarity.
+  return Math.max(0, Math.min(255, v));
 }
