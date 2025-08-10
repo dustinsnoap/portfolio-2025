@@ -1,5 +1,5 @@
 if (typeof window !== "undefined") {
-    // ============================
+// ============================
 // Constants for easy adjustments
 // ============================
 const CIRCUIT_COLOR = "rgba(0, 136, 255, 1)";
@@ -15,6 +15,8 @@ const DOT_SPACING = 2;
 const CELL_SIZE = 10;
 const CIRCUIT_MIN_LENGTH = 3;
 const CIRCUIT_MAX_LENGTH = 16;
+let animationFrameId;
+
 
 // ============================
 // Utility Functions
@@ -445,12 +447,13 @@ function createOverlayCanvas(width, height) {
  * @param {Particles} particles
 */
 function startLoop(ctx, particles) {
+    cancelAnimationFrame(animationFrameId);
     function loop() {
         particles.update();
         particles.draw();
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         ctx.drawImage(particles.canvas, 0, 0);
-        requestAnimationFrame(loop);
+        animationFrameId = requestAnimationFrame(loop);
     }
     loop();
 }
@@ -460,6 +463,7 @@ let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
+        cancelAnimationFrame(animationFrameId);
         const circuitCanvas = document.getElementById("circuitCanvas");
         const particleCanvas = document.getElementById("particleCanvas");
 
