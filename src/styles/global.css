@@ -53,3 +53,25 @@ body {
   display: block;
   z-index: 1;
 }
+
+#statusBarCanvas {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 2;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+  background: transparent;
+}
+
+#statusBarOverlay {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 3;            /* above the bar */
+  pointer-events: none;  /* flip to auto if you add clickable icons */
+  width: 0; height: 0;   /* sized by JS */
+}

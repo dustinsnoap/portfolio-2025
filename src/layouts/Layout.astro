@@ -15,7 +15,17 @@ import "../styles/global.css";
     <CircuitBackground />
     <NameBackground />
     <slot />
+    <canvas id="statusBarCanvas"></canvas>
+    <div id="statusBarOverlay"></div>
+
+    <!-- Boot order: scale → features -->
+    <script type="module">
+      import { initPixelScale } from "/scripts/pixel-scale.js";
+      initPixelScale({ baseWidth: 198, maxWidthRatio: 0.8, minScale: 2, maxScale: 8 });
+    </script>
+
     <script type="module" src="/scripts/circuit-background.js"></script>
     <script type="module" src="/scripts/name.js"></script>
+    <script type="module" src="/scripts/status-bar.js"></script>
   </body>
 </html>
