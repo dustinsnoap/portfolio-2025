@@ -14,16 +14,17 @@ import "../styles/global.css";
   <body>
     <CircuitBackground />
     <NameBackground />
+
     <slot />
+
+    <!-- status bar -->
     <canvas id="statusBarCanvas"></canvas>
-    <div id="statusBarOverlay"></div>
 
     <!-- Boot order: scale → features -->
     <script type="module">
       import { initPixelScale } from "/scripts/pixel-scale.js";
-      initPixelScale({ baseWidth: 198, maxWidthRatio: 0.8, minScale: 2, maxScale: 8 });
+      initPixelScale({fixedScale: 4, minScale: 1, maxScale: 6});
     </script>
-
     <script type="module" src="/scripts/circuit-background.js"></script>
     <script type="module" src="/scripts/name.js"></script>
     <script type="module" src="/scripts/status-bar.js"></script>

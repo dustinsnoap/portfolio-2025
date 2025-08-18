@@ -1,191 +1,183 @@
 // ===================================
-// Status Bar
-// - Draws static bar
-// - Syncs CSS scale via pixel-scale service
-// - Provides placeholders for future tilesets (faces/icons)
+// Status Bar (canvas + shadow-canvas face blit)
+// - Static bar draw
+// - Shared pixel-scale (CSS only; source pixels stay native)
+// - Face frames blitted from a cached tileset
 // ===================================
 
 import { getPixelScale, onPixelScaleChange } from "./pixel-scale.js";
 
+// --- Final face offsets (visual nudge you found) ---
+const FACE_OFFSET = { x: 2, y: -6 }; // source-pixel nudges for your HUD art
+
 // DOM
 const canvas = document.getElementById("statusBarCanvas");
 const ctx = canvas.getContext("2d", { willReadFrequently: true });
+ctx.imageSmoothingEnabled = false;
+canvas.style.backgroundColor = "#111111";
 
-// Optional overlay container for future DOM sprites/icons
-const overlay = document.getElementById("statusBarOverlay");
+// Assets
+const BAR_SRC    = "/images/status_bar.png";
+const FACES_IMG  = "/images/faces.png";
+const FACES_ATLS = "/images/faces_atlas.json";
 
-// Source bar image
-const BAR_SRC = "/images/status_bar.png";
-
-// Intrinsic size
+// Bar intrinsic pixels
 let barW = 0;
 let barH = 0;
 let barImg = null;
 
-// RAF handle (kept for future effects; currently no-op)
-let rafId = null;
+// Faces tileset cache (shadow canvas)
+const shadow = document.createElement("canvas");
+const sctx = shadow.getContext("2d", { willReadFrequently: true });
+sctx.imageSmoothingEnabled = false;
 
-// --- Placeholders for future tilesets ---
-let faceTileset = null;     // { img: HTMLImageElement, atlas: {...} }
-let iconTileset = null;     // { img: HTMLImageElement, atlas: {...} }
-let faceState = "idle";     // current face frame name
-const mountedIcons = new Map(); // key -> { visible: boolean, x,y,w,h }
+let atlas = null;        // parsed atlas JSON
+let facesReady = false;
+
+// Face placement on the bar (SOURCE pixels, not CSS)
+let faceRect = { x: 0, y: 0, w: 29, h: 31 }; // defaults; updated after load
+let currentFace = "idle";
 
 // ===================================
 // Bootstrap
 // ===================================
-loadBar(BAR_SRC);
+init();
 
-// scale sync
-onPixelScaleChange(() => {
-  if (!barImg) return;
+async function init() {
+  await Promise.all([loadBar(BAR_SRC), loadFaces()]);
+  placeFaceRect();
+  drawBar();
+  blitFace(currentFace);
+
+  // announce
+  window.dispatchEvent(new CustomEvent("status-bar-ready",  { detail: { barW, barH } }));
+  window.dispatchEvent(new CustomEvent("status-bar-scale",  { detail: { scale: getPixelScale() } }));
+
+  // react to scale/resize (CSS only; redraw keeps frame clean)
+  onPixelScaleChange(handleScaleOrResize);
+  window.addEventListener("resize", handleScaleOrResize);
+
   applyCssScale();
-  layoutOverlay();
-  // You might reflow DOM sprites here later
-});
+}
 
-// perf-friendly pause on tab hide
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stopLoop();
-  else if (barImg) startLoop();
-});
-
-// cleanup on unload (hot reload)
-window.addEventListener("beforeunload", stopLoop);
-
-// keep sizing sane on resize (scale service already debounces)
-window.addEventListener("resize", () => {
-  if (!barImg) return;
+function handleScaleOrResize() {
   applyCssScale();
-  layoutOverlay();
-  stopLoop();
-  startLoop();
-});
+  drawBar();
+  blitFace(currentFace);
+}
 
 // ===================================
-// Load + size + base draw
+// Loading
 // ===================================
+
 async function loadBar(src) {
   const img = new Image();
   img.src = src;
   await img.decode();
-
   barImg = img;
   barW = img.width;
   barH = img.height;
-
-  // internal pixel grid
-  canvas.width = barW;
+  canvas.width  = barW;
   canvas.height = barH;
-
-  applyCssScale();
-  drawBase();
-
-  // announce ready for anyone who cares
-  window.dispatchEvent(
-    new CustomEvent("status-bar-ready", { detail: { barW, barH } })
-  );
-  // also emit current scale
-  window.dispatchEvent(
-    new CustomEvent("status-bar-scale", { detail: { scale: getPixelScale() } })
-  );
-
-  startLoop(); // no-op for now
 }
 
-/** Apply shared integer pixel scale to CSS size. */
+async function loadFaces() {
+  atlas = await fetch(FACES_ATLS).then(r => r.json());
+
+  // Force your actual tile size (29x31), regardless of JSON values (if needed).
+  atlas.tileWidth  = 29;
+  atlas.tileHeight = 31;
+
+  const img = new Image();
+  img.src = FACES_IMG;
+  await img.decode();
+
+  // cache the whole tileset in shadow canvas
+  shadow.width  = img.width;
+  shadow.height = img.height;
+  sctx.clearRect(0, 0, shadow.width, shadow.height);
+  sctx.drawImage(img, 0, 0);
+
+  facesReady = true;
+
+  // sync rect size to atlas
+  faceRect.w = atlas.tileWidth;
+  faceRect.h = atlas.tileHeight;
+}
+
+// ===================================
+// Layout / Scale
+// ===================================
+
 function applyCssScale() {
   const s = getPixelScale();
-  canvas.style.width = `${barW * s}px`;
+  canvas.style.width  = `${barW * s}px`;
   canvas.style.height = `${barH * s}px`;
 }
 
-/** Size overlay box to match canvas CSS size (so children can be placed in source-pixel coords). */
-function layoutOverlay() {
-  if (!overlay) return;
-  const s = getPixelScale();
-  overlay.style.width = `${barW * s}px`;
-  overlay.style.height = `${barH * s}px`;
+/**
+ * Center the face in source pixels, with your integer nudges.
+ */
+function placeFaceRect() {
+  const tw = atlas?.tileWidth  ?? faceRect.w;
+  const th = atlas?.tileHeight ?? faceRect.h;
+
+  faceRect.w = tw;
+  faceRect.h = th;
+  faceRect.x = Math.floor((barW - tw) / 2) + (FACE_OFFSET.x | 0);
+  faceRect.y = 8 + (FACE_OFFSET.y | 0); // adjust 8 if your HUD window shifts
 }
 
-/** Draw static bar (no cutouts). */
-function drawBase() {
+// ===================================
+// Drawing
+// ===================================
+
+function drawBar() {
   ctx.clearRect(0, 0, barW, barH);
   ctx.drawImage(barImg, 0, 0);
 }
 
-// Minimal loop kept for future scanlines/CRT fx (currently idle)
-function tick() {
-  // drawBase(); // uncomment if you add transient effects
-  rafId = requestAnimationFrame(tick);
+function clearFaceArea() {
+  ctx.clearRect(faceRect.x, faceRect.y, faceRect.w, faceRect.h);
 }
-function startLoop() {
-  if (rafId !== null) return;
-  rafId = requestAnimationFrame(tick);
-}
-function stopLoop() {
-  if (rafId !== null) {
-    cancelAnimationFrame(rafId);
-    rafId = null;
-  }
+
+function blitFace(name) {
+  if (!facesReady || !atlas) return;
+
+  const frame = atlas.frames[name] || atlas.frames["idle"];
+  const [cx, cy] = frame;
+
+  const sx = cx * atlas.tileWidth;
+  const sy = cy * atlas.tileHeight;
+
+  clearFaceArea();
+  ctx.drawImage(
+    shadow,
+    sx, sy, atlas.tileWidth, atlas.tileHeight,
+    faceRect.x, faceRect.y, atlas.tileWidth, atlas.tileHeight
+  );
+
+  currentFace = name;
 }
 
 // ===================================
-// PUBLIC API (placeholders for quick upgrade later)
+// Public API
 // ===================================
 
-/**
- * Register the face tileset to be used later.
- * @param {{img: HTMLImageElement, atlas: object}} tileset
- */
-export function registerFaceTileset(tileset) {
-  faceTileset = tileset;
+/** Set face immediately; draws only if assets are ready. */
+export function setFace(name) {
+  blitFace(name);
 }
 
-/**
- * Register the icon tileset to be used later.
- * @param {{img: HTMLImageElement, atlas: object}} tileset
- */
-export function registerIconTileset(tileset) {
-  iconTileset = tileset;
+/** Flash a face then return to idle. */
+let faceTimer = null;
+export function flashFace(name, ms = 900) {
+  clearTimeout(faceTimer);
+  blitFace(name);
+  faceTimer = setTimeout(() => blitFace("idle"), ms);
 }
 
-/**
- * Change the face state (frame name). No-op until tileset is wired.
- * @param {string} state - e.g., 'idle' | 'hover' | 'success'
- */
-export function setFace(state) {
-  faceState = state;
-  // TODO: when wired, update a DOM sprite/background-position here.
-  // For now, just emit an event for debugging.
-  window.dispatchEvent(new CustomEvent("status-bar-face", { detail: { state } }));
-}
-
-/**
- * Declare an icon position by key. No draw until tileset is wired.
- * @param {string} key       - unique id, e.g., 'java'
- * @param {{x:number,y:number,w?:number,h?:number,visible?:boolean}} opts
- *        x/y/w/h are source-pixel coords relative to status bar.
- */
-export function defineIcon(key, opts) {
-  const { x, y, w = 16, h = 16, visible = true } = opts || {};
-  mountedIcons.set(key, { x, y, w, h, visible });
-  // TODO: when wired, create/position DOM sprite here.
-}
-
-/** Show a previously defined icon (no-op until wired). */
-export function showIcon(key) {
-  const it = mountedIcons.get(key);
-  if (it) it.visible = true;
-}
-
-/** Hide a previously defined icon (no-op until wired). */
-export function hideIcon(key) {
-  const it = mountedIcons.get(key);
-  if (it) it.visible = false;
-}
-
-// For convenience: expose dimensions
+/** Bar size/scale for consumers. */
 export function getStatusBarMetrics() {
-  return { barW, barH, scale: getPixelScale() };
+  return { barW, barH, scale: getPixelScale(), faceRect: { ...faceRect } };
 }

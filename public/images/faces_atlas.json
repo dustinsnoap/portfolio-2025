@@ -1,0 +1,16 @@
+{
+  "tileWidth": 29,
+  "tileHeight": 31,
+  "cols": 8,
+  "rows": 5,
+  "frames": {
+    "idle":    [0, 0],
+    "hover":   [1, 0],
+    "focus":   [2, 0],
+    "click":   [3, 0],
+    "happy":   [4, 0],
+    "annoyed": [5, 0],
+    "success": [6, 0],
+    "error":   [7, 0]
+  }
+}
