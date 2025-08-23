@@ -4,13 +4,23 @@
   "cols": 8,
   "rows": 5,
   "frames": {
-    "idle":    [0, 0],
-    "hover":   [1, 0],
-    "focus":   [2, 0],
-    "click":   [3, 0],
-    "happy":   [4, 0],
-    "annoyed": [5, 0],
-    "success": [6, 0],
-    "error":   [7, 0]
+    "idle":            [0, 2],
+    "hover":           [1, 4],
+    "focus":           [2, 0],
+    "click":           [3, 0],
+    "happy":           [4, 0],
+    "annoyed":         [5, 0],
+    "success":         [6, 0],
+    "error":           [7, 0],
+
+    "look_left":       [4, 2],
+    "look_right":      [2, 2],
+    "look_up":         [3, 0],
+    "look_down":       [7, 3],
+
+    "look_up_left":    [3, 3],
+    "look_up_right":   [1, 4],
+    "look_down_left":  [2, 3],
+    "look_down_right": [2, 4]
   }
 }

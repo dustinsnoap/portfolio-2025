@@ -1,4 +1,18 @@
 ---
+/**
+ * Root layout
+ * - Renders background effects + name overlay
+ * - Provides a slot for page content
+ * - Hosts the DOOM-style status bar HUD (canvas)
+ * - Initializes a shared pixel-scale so every pixel-art element uses the same size
+ *
+ * Order of operations (critical):
+ *   1) Render canvases (DOM nodes exist)
+ *   2) Init pixel-scale (sets --pixel-scale + notifies listeners)
+ *   3) Start background/name scripts
+ *   4) Start status bar
+ *   5) Bind low-priority face behavior (mouse-look)
+ */
 import CircuitBackground from "../components/CircuitBackground.astro";
 import NameBackground from "../components/Name.astro";
 import "../styles/global.css";
@@ -12,21 +26,54 @@ import "../styles/global.css";
     <title>Dustin Snoap</title>
   </head>
   <body>
+    {/*
+      Layers (z-order handled in CSS):
+        - CircuitBackground: full-viewport animated wiring (behind everything)
+        - NameBackground: pixel logo canvas (scales via pixel-scale service)
+        - <slot />: page content
+        - statusBarCanvas: fixed bottom HUD; draws bar + face tiles
+    */}
     <CircuitBackground />
     <NameBackground />
 
+    <!-- Main page content from routes -->
     <slot />
 
-    <!-- status bar -->
+    <!-- HUD canvas (drawn by /scripts/status-bar.js). Keep as a sibling, not nested. -->
     <canvas id="statusBarCanvas"></canvas>
 
-    <!-- Boot order: scale → features -->
+    {/*
+      Boot order notes:
+        - Initialize pixel-scale FIRST so all subsequent modules read the same integer scale.
+        - fixedScale locks the pixel size globally (e.g., 4x). Change here to shrink/grow pixels.
+          If you want responsive pixels later, remove fixedScale and use maxWidthRatio/targetWidthPx.
+    */}
     <script type="module">
       import { initPixelScale } from "/scripts/pixel-scale.js";
       initPixelScale({fixedScale: 4, minScale: 1, maxScale: 6});
     </script>
+
+    {/*
+      Feature scripts:
+        - circuit-background.js: animated BG (manages its own RAF + cancel on resize/visibility)
+        - name.js: draws the pixel name with animated grain (reads shared pixel scale)
+        - status-bar.js: draws static bar and blits face frames from a tileset (shadow canvas)
+        - face-priority.js: tiny wrapper that lets high-priority faces override low-priority ones
+        - mouse-look.js (initialized below): low-priority “eyes follow cursor” behavior
+    */}
     <script type="module" src="/scripts/circuit-background.js"></script>
     <script type="module" src="/scripts/name.js"></script>
     <script type="module" src="/scripts/status-bar.js"></script>
+    <script type="module" src="/scripts/face-priority.js"></script>
+
+    {/*
+      Lowest-priority behavior: mouse-look updates face based on cursor zone,
+      but yields to higher-priority events (clicks, success/error flashes, etc.).
+      Safe to init last.
+    */}
+    <script type="module">
+      import { initMouseLook } from "/scripts/mouse-look.js";
+      initMouseLook();
+    </script>
   </body>
 </html>
