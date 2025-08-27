@@ -1,3 +1,34 @@
+/**
+ * circuit-background.js
+ * ----------------------
+ * Renders a retro-style animated circuit board background using multiple canvas layers.
+ *
+ * Layers:
+ * - Dots layer: faint static grid texture for depth.
+ * - Circuit layer: randomly generated paths with endpoints, drawn once offscreen.
+ * - Particle layer: animated particles that travel along circuit paths.
+ *
+ * Core pieces:
+ * - Constants: define colors, speeds, sizes, probabilities.
+ * - Utility fns: random choice, cell math, color selection.
+ * - Data classes:
+ *     Column   → vertical cell occupancy map
+ *     Circuit  → path definition + color scheme
+ *     Circuits → generator + renderer for circuit paths
+ *     Dots     → background dot grid
+ *     Particle → single moving entity along a path
+ *     Particles→ manages + renders all particles
+ *
+ * Runtime:
+ * - init() builds canvases, generates circuits + particles, and kicks off the animation loop.
+ * - startLoop() drives the RAF cycle: update → draw particles → blit to screen.
+ * - On resize: tears down and reinitializes everything.
+ *
+ * Usage:
+ * - Must be loaded after <canvas id="circuitCanvas"> and <canvas id="particleCanvas"> exist.
+ * - Automatically initializes on window.onload and re-inits on resize.
+ */
+
 if (typeof window !== "undefined") {
     // ============================
     // Constants for easy adjustments

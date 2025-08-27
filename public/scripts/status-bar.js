@@ -8,7 +8,9 @@
 import { getPixelScale, onPixelScaleChange } from "./pixel-scale.js";
 
 // --- Final face offsets (visual nudge you found) ---
-const FACE_OFFSET = { x: 2, y: -6 }; // source-pixel nudges for your HUD art
+const FACE_OFFSET = { x: 0, y: -7 }; // source-pixel nudges for your HUD art
+const FACE_WIDTH = 32
+const FACE_HEIGHT = 32
 
 // DOM
 const canvas = document.getElementById("statusBarCanvas");
@@ -34,8 +36,8 @@ sctx.imageSmoothingEnabled = false;
 let atlas = null;        // parsed atlas JSON
 let facesReady = false;
 
-// Face placement on the bar (SOURCE pixels, not CSS)
-let faceRect = { x: 0, y: 0, w: 29, h: 31 }; // defaults; updated after load
+// Face placement on the bar
+let faceRect = { x: 0, y: -7, w: FACE_WIDTH, h: FACE_HEIGHT }; // defaults; updated after load
 let currentFace = "idle";
 
 // ===================================
@@ -84,9 +86,9 @@ async function loadBar(src) {
 async function loadFaces() {
   atlas = await fetch(FACES_ATLS).then(r => r.json());
 
-  // Force your actual tile size (29x31), regardless of JSON values (if needed).
-  atlas.tileWidth  = 29;
-  atlas.tileHeight = 31;
+  // Force your actual tile size regardless of JSON values
+  atlas.tileWidth  = FACE_WIDTH;
+  atlas.tileHeight = FACE_HEIGHT;
 
   const img = new Image();
   img.src = FACES_IMG;
